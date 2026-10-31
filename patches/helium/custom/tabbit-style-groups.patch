@@ -1,0 +1,79 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_group_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_group_view.h
+@@ -35,7 +35,7 @@
+   METADATA_HEADER(TabGroupView, TabCollectionZOrderManager)
+ 
+  public:
+-  static constexpr int kTabLeadingPadding = 6;
++  static constexpr int kTabLeadingPadding = 16;
+ 
+   explicit TabGroupView(TabCollectionNode* collection_node);
+   TabGroupView(const TabGroupView&) = delete;
+--- a/chrome/browser/ui/views/tabs/common/tab_group_line_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_line_view.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/geometry/skia_conversions.h"
+ #include "ui/views/widget/widget.h"
+ 
+ namespace {
+@@ -70,22 +71,32 @@
+ void TabGroupLineView::PaintVertical(gfx::Canvas* canvas) {
+   cc::PaintFlags flags;
+   flags.setAntiAlias(true);
+-  flags.setColor(GetGroupColor());
++  flags.setColor(SkColorSetA(GetGroupColor(), 180));
+   flags.setStyle(cc::PaintFlags::kStroke_Style);
+-  flags.setStrokeWidth(2);
++  flags.setStrokeWidth(1.5f);
+ 
+   gfx::Rect bounds = GetLocalBounds();
+-  canvas->DrawLine(
+-      gfx::Point(bounds.x() + 1, bounds.y()),
+-      gfx::Point(bounds.x() + 1, bounds.bottom()),
+-      flags);
++  const int spine_x = bounds.x() + 6;
++
++  // Draw the vertical tree spine
++  canvas->DrawLine(gfx::Point(spine_x, bounds.y()),
++                   gfx::Point(spine_x, bounds.bottom() - 6),
++                   flags);
++
++  // Draw subtle connecting branches into each child tab (VS Code style)
++  for (views::View* child : tab_group_view_.children()) {
++    if (child != this) {
++      const int child_mid_y = child->y() + child->height() / 2;
++      canvas->DrawLine(gfx::Point(spine_x, child_mid_y),
++                       gfx::Point(spine_x + 8, child_mid_y),
++                       flags);
++    }
++  }
+ }
+--- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
+@@ -25,9 +25,9 @@
+ namespace {
+-constexpr int kTabVerticalPadding = 2;
++constexpr int kTabVerticalPadding = 3;
+ constexpr int kGroupLineWidth = 2;
+-constexpr int kGroupLineCollapsedLeadingPadding = 2;
+-constexpr int kGroupHeaderHeight = 26;
+-constexpr int kGroupHeaderVerticalMargin = 3;
++constexpr int kGroupLineCollapsedLeadingPadding = 4;
++constexpr int kGroupHeaderHeight = 28;
++constexpr int kGroupHeaderVerticalMargin = 4;
+ }  // namespace
+--- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
+@@ -724,8 +724,10 @@
+ }
+ 
+ int TabGroupHeaderView::GetHorizontalInset() const {
+   return orientation_ == TabStripOrientation::kVertical
+-             ? 7
++             ? 8
+              : TabGroupStyle::GetInsetsForHeaderChip(orientation_).left();
+ }
+

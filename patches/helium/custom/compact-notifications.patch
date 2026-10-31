@@ -1,0 +1,74 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -20,6 +20,9 @@
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/render_text.h"
++#include "ui/gfx/font_list.h"
++#include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
++#include "content/public/browser/web_contents.h"
+ 
+ namespace {
+ constexpr int kBadgeSize = 8;
+@@ -904,6 +907,57 @@
+   InvalidateLayout();
+ }
+ 
++void TabView::OnPaint(gfx::Canvas* canvas) {
++  TabSlotView::OnPaint(canvas);
++
++  // In collapsed/compact mode, render subtle notification indicators on background tabs.
++  if (collapsed_ && !active_ && tab_slot_controller_) {
++    bool has_unread_activity = false;
++    int unread_count = 0;
++
++    // Inspect tab contents title for reliable notifications formatted as "(N)"
++    if (tab_slot_controller_->GetWebContentsForTab(this)) {
++      const std::u16string title = tab_slot_controller_->GetWebContentsForTab(this)->GetTitle();
++      if (title.length() > 2 && title.front() == u'(') {
++        size_t end_paren = title.find(u')');
++        if (end_paren != std::u16string::npos && end_paren > 1) {
++          int parsed = 0;
++          if (base::StringToInt(title.substr(1, end_paren - 1), &parsed) && parsed > 0) {
++            unread_count = parsed;
++          }
++        }
++      }
++      // Activity flag if tab has updated without being focused
++      has_unread_activity = tab_slot_controller_->GetWebContentsForTab(this)->IsLoading() == false &&
++                            unread_count > 0;
++    }
++
++    if (has_unread_activity || unread_count > 0) {
++      gfx::Rect icon_bounds = icon_->bounds();
++      cc::PaintFlags badge_flags;
++      badge_flags.setAntiAlias(true);
++      badge_flags.setStyle(cc::PaintFlags::kFill_Style);
++      badge_flags.setColor(SkColorSetRGB(0xE5, 0x39, 0x35));  // Subtle red notification
++
++      if (unread_count > 0) {
++        // Rounded-square badge for reliable count
++        const int badge_w = 12;
++        const int badge_h = 10;
++        gfx::Rect badge_rect(icon_bounds.right() - badge_w / 2, icon_bounds.y() - 2, badge_w, badge_h);
++        canvas->DrawRoundRect(gfx::RectF(badge_rect), 3.0f, badge_flags);
++
++        // Render number
++        const std::u16string count_text = base::NumberToString16(std::min(unread_count, 99));
++        canvas->DrawStringRect(count_text, gfx::FontList(), SK_ColorWHITE, badge_rect);
++      } else {
++        // Activity red dot
++        gfx::Rect dot_rect(icon_bounds.right() - 4, icon_bounds.y(), 6, 6);
++        canvas->DrawRoundRect(gfx::RectF(dot_rect), 2.0f, badge_flags);
++      }
++    }
++  }
++}
++
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -85,6 +85,7 @@
+   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+   void OnCollapseStateChanged(
+       tabs::VerticalTabStripCollapseState state) override;
++  void OnPaint(gfx::Canvas* canvas) override;
+
